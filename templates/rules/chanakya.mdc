@@ -1,0 +1,40 @@
+---
+description: Chanakya framework - always-on control for agent work on this project.
+globs:
+alwaysApply: true
+---
+
+# Chanakya
+
+This repo is governed by the Chanakya framework. Its control center is
+[.chanakya/manifest.yaml](../../.chanakya/manifest.yaml). Follow this loop on every task.
+
+## Before acting
+
+1. Read `.chanakya/manifest.yaml`.
+2. Resolve the current branch: `git rev-parse --abbrev-ref HEAD`. Read this branch's
+   working memory: `.chanakya/memory-bank/<branch>/active-context.md` and `progress.md`
+   (create the folder/files if missing). Never read another branch's memory.
+3. Pull only the relevant knowledge from `.chanakya/knowledge/` via its `index.md`.
+   Do NOT open raw source folders - they are distilled into the knowledge bundle.
+   If a needed concept is missing, propose running the producer (`.chanakya/templates/producer-prompt.md`).
+
+## Sources of truth
+
+- Conventions and styling: `.chanakya/knowledge/conventions.md`.
+- Project architecture: `.chanakya/knowledge/architecture/`.
+- [ADD_PROJECT_SPECIFIC_SOURCES_HERE]
+
+## Canary (context-rot check)
+
+Before significant edits and after long conversations, verify the facts in
+[.chanakya/canary.md](../../.chanakya/canary.md). On any mismatch: stop, re-read the
+knowledge bundle, and if it still cannot be reconciled, tell the user to start a fresh
+chat (memory will rebuild from the bundle).
+
+## Definition of done
+
+- Builds/lints clean and matches the agreed plan.
+- Followed `conventions.md`.
+- [ADD_PROJECT_SPECIFIC_DOD_HERE]
+- Updated this branch's `active-context.md` and `progress.md`.

@@ -1,0 +1,29 @@
+name: Chanakya
+version: {{VERSION}}
+
+# {{PROJECT_NAME}} is governed by the Chanakya framework. It gives every
+# agent one place to learn how this project is built, what already exists, and the
+# quality bar to meet.
+description: >
+  Centralized, versioned control plane for agent work:
+  always-on rule + distilled knowledge + canary + per-branch memory + a single CLI.
+
+# External source repos. Real paths are resolved per-machine from repo-paths.properties
+# (gitignored); only logical names and include-globs live here.
+repos:
+  # Example source configuration:
+  # source_name:
+  #   source: path.in.properties
+  #   include:
+  #     - "**/*.md"
+
+# Model tiers used by the two Cursor Custom Modes.
+models:
+  plan: strong
+  implement: daily
+
+# Pointers to the rest of the framework.
+canary: .chanakya/canary.md
+knowledge_index: .chanakya/knowledge/index.md
+memory_bank: .chanakya/memory-bank
+changelog: .chanakya/CHANGELOG.md

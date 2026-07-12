@@ -1,0 +1,8 @@
+# Chanakya machine-local source paths. Copy this file to repo-paths.properties
+# (same folder) and set the values for YOUR machine.
+# repo-paths.properties is gitignored.
+#
+# ${HOME} is expanded by the chanakya CLI.
+
+# Example:
+# my_docs=/absolute/path/to/docs
