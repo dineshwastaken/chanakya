@@ -100,10 +100,26 @@ cmd_update() {
   local ref; ref="$(grep -E '"engine_ref":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/')"
   
   info "Engine: $url @ $ref"
-  if confirm "Fetch engine updates?"; then
-    git_safe -C "$CHANAKYA_DIR" fetch origin
-    git_safe -C "$CHANAKYA_DIR" checkout "$ref"
-    ok "Engine updated to $ref"
+  if confirm "Sync engine files to $ref?"; then
+    local tmp_dir; tmp_dir="/tmp/chanakya-update-$(date +%s)"
+    info "Downloading to temporary folder..."
+    git clone --depth 1 --branch "$ref" "$url" "$tmp_dir" >/dev/null 2>&1 || {
+      bad "Failed to download version $ref. Check the URL and tag."
+      return 1
+    }
+    
+    info "Syncing files to .chanakya/..."
+    # Copy only the engine parts, preserving your local generated files
+    cp -r "$tmp_dir/bin" "$CHANAKYA_DIR/"
+    cp -r "$tmp_dir/lib" "$CHANAKYA_DIR/"
+    cp -r "$tmp_dir/templates" "$CHANAKYA_DIR/"
+    cp -r "$tmp_dir/docs" "$CHANAKYA_DIR/"
+    cp "$tmp_dir/VERSION" "$CHANAKYA_DIR/"
+    cp "$tmp_dir/CHANGELOG.md" "$CHANAKYA_DIR/"
+    cp "$tmp_dir/LICENSE" "$CHANAKYA_DIR/"
+    
+    rm -rf "$tmp_dir"
+    ok "Engine files updated to $ref. (No git actions taken in your project)"
   fi
 }
 
