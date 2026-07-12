@@ -1,4 +1,4 @@
 {
-  "engine_url": "git@github.com:{{GH_USER}}/Chanakya.git",
-  "engine_ref": "v0.1.0"
+  "engine_url": "https://github.com/dineshwastaken/chanakya.git",
+  "engine_ref": "main"
 }

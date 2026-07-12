@@ -240,7 +240,10 @@ cmd_init() {
   # 2. Engine clone
   if [ ! -d "$CHANAKYA_DIR" ]; then
     if [ ! -f "$REPO_ROOT/.chanakya.json" ]; then
-      bad ".chanakya.json missing. Cannot clone engine."
+      bad ".chanakya.json missing."
+      info "Create a .chanakya.json in your project root with your engine details."
+      info "Example:"
+      info ' { "engine_url": "https://github.com/dineshwastaken/chanakya.git", "engine_ref": "main" }'
       return 1
     fi
     local url; url="$(grep -E '"engine_url":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/')"
