@@ -302,7 +302,7 @@ case "${1:-help}" in
   uninstall) cmd_uninstall ;;
   version)
     if [ "${2:-}" = "bump" ]; then
-      local new_v; new_v=$(bump_version "${3:-patch}")
+      new_v=$(bump_version "${3:-patch}")
       ok "Bumped to $new_v"
     else
       get_version
