@@ -8,11 +8,15 @@ set -euo pipefail
 BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_ROOT="$(cd "$BIN_DIR/.." && pwd)"
 
+# Constants
+PONYTAIL_REPO="https://github.com/DietrichGebert/ponytail"
+
 # Load libraries (order matters)
 # If we are running from the engine root, use its lib/
 # If we are running from a consumer's .chanakya/bin/, use that lib/
 source "$ENGINE_ROOT/lib/ui.sh"
 source "$ENGINE_ROOT/lib/common.sh"
+source "$ENGINE_ROOT/lib/version.sh"
 
 # --- Preflight --------------------------------------------------------------------------------
 
@@ -46,7 +50,7 @@ cmd_doctor() {
 cmd_status() {
   cmd_doctor || return 1
   echo
-  printf "Chanakya %s  -  %s\n" "$(manifest_value version)" "$(manifest_value name)"
+  printf "Chanakya %s  -  %s\n" "$(get_version)" "$(manifest_value name)"
   echo
   
   step "Project"
@@ -107,7 +111,10 @@ cmd_suggest_commit() {
   step "Commit Suggestions"
   echo "Chanakya suggests staging these framework files for your team:"
   echo
-  printf "  ${C_CYAN}git add chanakya .chanakya.json .cursor/rules/chanakya.mdc .gitignore${C_RESET}\n"
+  local files="chanakya .chanakya.json .cursor/rules/chanakya.mdc .gitignore"
+  [ -f "$REPO_ROOT/.cursor/rules/ponytail.mdc" ] && files="$files .cursor/rules/ponytail.mdc"
+  
+  printf "  ${C_CYAN}git add $files${C_RESET}\n"
   echo
   info "Reason: These are the minimal footprint files needed for teammates to run './chanakya init'."
 }
@@ -179,7 +186,7 @@ cmd_produce() {
 # scan: Inventory and planned actions
 cmd_scan() {
   step "Reconciling artifacts"
-  local items=("engine" "manifest" "paths" "rule" "canary" "knowledge")
+  local items=("engine" "manifest" "paths" "rule" "ponytail" "canary" "knowledge")
   local total=${#items[@]}
   local i=1
   
@@ -193,7 +200,9 @@ cmd_scan() {
       paths)
         if [ -f "$CHANAKYA_DIR/repo-paths.properties" ]; then ok "Paths: present"; else warn "Paths: missing"; fi ;;
       rule)
-        if [ -f "$REPO_ROOT/.cursor/rules/chanakya.mdc" ]; then ok "Rule: present"; else warn "Rule: missing"; fi ;;
+        if [ -f "$REPO_ROOT/.cursor/rules/chanakya.mdc" ]; then ok "Chanakya Rule: present"; else warn "Chanakya Rule: missing"; fi ;;
+      ponytail)
+        if [ -f "$REPO_ROOT/.cursor/rules/ponytail.mdc" ]; then ok "Ponytail Rule: present"; else info "Ponytail Rule: not installed (optional)"; fi ;;
       canary)
         if [ -f "$CHANAKYA_DIR/canary.md" ]; then ok "Canary: present"; else warn "Canary: missing"; fi ;;
       knowledge)
@@ -235,7 +244,27 @@ cmd_init() {
     if confirm "Install always-on Cursor rule?"; then
       mkdir -p "$REPO_ROOT/.cursor/rules"
       cp "$CHANAKYA_DIR/templates/rules/chanakya.mdc" "$REPO_ROOT/.cursor/rules/chanakya.mdc"
-      ok "Rule installed."
+      ok "Chanakya rule installed."
+    fi
+  fi
+  
+  if [ ! -f "$REPO_ROOT/.cursor/rules/ponytail.mdc" ]; then
+    if confirm "Install original Ponytail (lazy senior dev) rule from GitHub?" "default_y"; then
+      mkdir -p "$REPO_ROOT/.cursor/rules"
+      mkdir -p "$CHANAKYA_DIR/vendor"
+      info "Fetching Ponytail from $PONYTAIL_REPO..."
+      if [ -d "$CHANAKYA_DIR/vendor/ponytail" ]; then
+        git_safe -C "$CHANAKYA_DIR/vendor/ponytail" pull origin main
+      else
+        git_safe clone --depth 1 "$PONYTAIL_REPO" "$CHANAKYA_DIR/vendor/ponytail"
+      fi
+      
+      if [ -f "$CHANAKYA_DIR/vendor/ponytail/.cursor/rules/ponytail.mdc" ]; then
+        cp "$CHANAKYA_DIR/vendor/ponytail/.cursor/rules/ponytail.mdc" "$REPO_ROOT/.cursor/rules/ponytail.mdc"
+        ok "Original Ponytail rule installed."
+      else
+        bad "Could not find ponytail.mdc in the cloned repository."
+      fi
     fi
   fi
   
@@ -271,11 +300,18 @@ case "${1:-help}" in
   disable)  cmd_disable ;;
   suggest-commit) cmd_suggest_commit ;;
   uninstall) cmd_uninstall ;;
+  version)
+    if [ "${2:-}" = "bump" ]; then
+      local new_v; new_v=$(bump_version "${3:-patch}")
+      ok "Bumped to $new_v"
+    else
+      get_version
+    fi
+    ;;
   produce)  cmd_produce "${2:-}" ;;
   scan)     cmd_scan ;;
   init)     cmd_init ;;
-  version)  echo "$(manifest_value version "$ENGINE_ROOT/manifest.yaml")" ;;
-  *) echo "Chanakya CLI $(manifest_value version "$ENGINE_ROOT/manifest.yaml")";
+  *) echo "Chanakya CLI $(get_version)";
      echo "Usage: $0 <command>";
      echo "  doctor          verify prerequisites";
      echo "  init            setup framework";
@@ -286,5 +322,6 @@ case "${1:-help}" in
      echo "  update          pull engine updates";
      echo "  enable/disable  toggle framework governance";
      echo "  suggest-commit  see what to check in";
-     echo "  uninstall       remove framework from project" ;;
+     echo "  uninstall       remove framework from project";
+     echo "  version [bump]  show or increment version (major|minor|patch)" ;;
 esac
