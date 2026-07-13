@@ -18,40 +18,34 @@ In long development sessions, AI agents often:
 
 - **Distilled Knowledge**: Instead of raw docs, agents read high-signal "concept files" (OKF format) that explain *why* and *how*, not just *what*.
 - **Canary (Sentinels)**: A set of verifiable "ground-truth" facts used to detect when an agent's context has degraded.
-- **Branch Memory**: Persistent, per-branch working memory (`active-context.md`, `progress.md`) that carries context across chat sessions and model switches.
+- **Local State**: Persistent working memory (`active-context.md`, `progress.md`) that carries context across chat sessions and model switches.
 - **Always-on Rules**: Cursor `.mdc` rules that force agents to follow the strategist's loop on every single turn.
 
 ## 🚀 Quickstart
 
-Chanakya is distributed as a standalone "engine" that you pull into your projects via a bootstrap script.
+Chanakya is distributed as a standalone "engine" that you pull into your projects via a bootstrap shim.
 
-1.  **Bootstrap**: Run this in your project root to download the CLI:
+1.  **Bootstrap**: Run this in your project root to download the shim:
     ```bash
-    curl -sSL https://raw.githubusercontent.com/dineshwastaken/chanakya/main/bin/chanakya > chanakya && chmod +x chanakya
+    curl -sSL https://raw.githubusercontent.com/dineshwastaken/chanakya/main/templates/chanakya > chanakya && chmod +x chanakya
     ```
-2.  **Configure**: Create a `.chanakya.json` in your project root to point to the engine:
-    ```json
-    {
-      "engine_url": "git@github.com:dineshwastaken/chanakya.git",
-      "engine_ref": "main"
-    }
-    ```
-3.  **Initialize**: Run the setup command:
+2.  **Initialize**: Run the setup command:
     ```bash
     ./chanakya init
     ```
-4.  **Finalize**:
+3.  **Finalize**:
     - Edit `.chanakya/repo-paths.properties` to map your local source directories.
     - Open a Cursor Agent chat and say: *"Build my canary.md and distill project knowledge."*
 
 ## 🛠️ The CLI
 
 The `chanakya` CLI is your single entry point for framework health:
-- `status`: Check project health, branch memory, and source paths.
-- `scan`: Reconcile framework artifacts (detect missing or stale files).
+- `status`: Check project health and source paths.
+- `scan`: Reconcile framework artifacts.
 - `assess`: Quantify the token savings and context benefit.
 - `produce`: Guide an agent through a knowledge distillation pass.
-- `update`: Pull the latest strategist logic from your engine repo.
+- `update`: Run a project health pass to detect drift or missing files.
+- `update-framework`: Pull the latest strategist logic from the framework repo.
 
 ## 📜 Credits
 

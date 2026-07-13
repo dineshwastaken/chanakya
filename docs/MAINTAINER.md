@@ -9,7 +9,7 @@ If you haven't connected this folder to a remote repository yet, follow these st
 1. **Create a Remote**: Create an empty repository named `Chanakya` on your personal GitHub account. Do not initialize it with a README or License.
 2. **Initialize Local**:
    ```bash
-   cd "/Users/dinesh.bandaru/Documents/Personal/Chanakya"
+   cd "/Users/dinesh.bandaru/Documents/Personal/chanakya"
    git init
    git branch -M main
    ```
@@ -41,4 +41,4 @@ If you haven't connected this folder to a remote repository yet, follow these st
 
 ## Distribution
 
-Consumers reference your engine via `.chanakya.json`. They can update to your latest tagged release by running `./chanakya update`.
+Consumers download the shim from your repository. They can update to your latest changes on `main` by running `./chanakya update-framework`.

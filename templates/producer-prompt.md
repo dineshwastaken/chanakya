@@ -1,6 +1,6 @@
 # Chanakya producer - how to distill the docs
 
-The "producer" turns huge raw sources into small, committed knowledge
+The "producer" turns huge raw sources into small knowledge
 files under `.chanakya/knowledge/`. You do NOT run a program - you paste a prompt into a Cursor
 chat and let the agent write the files.
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # lib/common.sh - Shared logic for Chanakya CLI
 
+# Constants
+DEFAULT_ENGINE_URL="https://github.com/dineshwastaken/chanakya.git"
+DEFAULT_ENGINE_REF="main"
+
 # Locate REPO_ROOT and CHANAKYA_DIR
 # We assume the shim at root or the script in .chanakya/bin/
 find_roots() {
@@ -22,6 +26,28 @@ find_roots() {
   
   # CHANAKYA_DIR is the project-specific instance folder in the consumer
   CHANAKYA_DIR="$REPO_ROOT/.chanakya"
+}
+
+# resolve_engine -> sets ENGINE_URL and ENGINE_REF based on overrides or defaults
+resolve_engine() {
+  ENGINE_URL="$DEFAULT_ENGINE_URL"
+  ENGINE_REF="$DEFAULT_ENGINE_REF"
+  
+  # 1. Local override (gitignored)
+  if [ -f "$CHANAKYA_DIR/local.env" ]; then
+    # shellcheck disable=SC1090
+    source "$CHANAKYA_DIR/local.env"
+    [ -n "${CHANAKYA_ENGINE_URL:-}" ] && ENGINE_URL="$CHANAKYA_ENGINE_URL"
+    [ -n "${CHANAKYA_ENGINE_REF:-}" ] && ENGINE_REF="$CHANAKYA_ENGINE_REF"
+  fi
+  
+  # 2. Legacy .chanakya.json (deprecated)
+  if [ -f "$REPO_ROOT/.chanakya.json" ]; then
+    local url; url="$(grep -E '"engine_url":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/' || true)"
+    local ref; ref="$(grep -E '"engine_ref":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/' || true)"
+    [ -n "$url" ] && ENGINE_URL="$url"
+    [ -n "$ref" ] && ENGINE_REF="$ref"
+  fi
 }
 
 # manifest_value KEY [FILE] -> prints the value of a top-level "KEY: value" line

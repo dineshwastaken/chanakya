@@ -2,6 +2,20 @@
 
 All notable changes to the Chanakya framework will be documented in this file.
 
+## [0.1.4] - 2026-07-13
+### Added
+- Canonical self-contained bootstrap shim (`templates/chanakya`).
+- `update-framework` command for simple engine sync from `main`.
+- `update` command repurposed for read-only project health checks.
+- First-class Cursor skill templates (`templates/skills/`).
+- Automated health pass in `init` and `update`.
+
+### Changed
+- Removed mandatory `.chanakya.json` requirement; defaults are now internal.
+- Replaced `memory-bank` with optional `.chanakya/state/` model.
+- Normalized all framework paths to use `.chanakya/`.
+- Updated all documentation to reflect the new minimal footprint.
+
 ## [0.1.3] - 2026-07-13
 ### Added
 - Comprehensive README and updated documentation.

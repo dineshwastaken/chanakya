@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# Chanakya bootstrap shim.
+#
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CHANAKYA_DIR="$REPO_ROOT/.chanakya"
+
+# Defaults
+DEFAULT_URL="https://github.com/dineshwastaken/chanakya.git"
+DEFAULT_REF="main"
+
+# Local override (gitignored)
+LOCAL_CONFIG="$CHANAKYA_DIR/local.env"
+if [ -f "$LOCAL_CONFIG" ]; then
+  # shellcheck disable=SC1090
+  source "$LOCAL_CONFIG"
+fi
+
+URL="${CHANAKYA_ENGINE_URL:-$DEFAULT_URL}"
+REF="${CHANAKYA_ENGINE_REF:-$DEFAULT_REF}"
+
+# Legacy support for .chanakya.json (deprecated, not recommended to commit)
+JSON_CONFIG="$REPO_ROOT/.chanakya.json"
+if [ -f "$JSON_CONFIG" ] && [ -z "${CHANAKYA_ENGINE_URL:-}" ]; then
+  URL="$(grep -E '"engine_url":' "$JSON_CONFIG" | sed -E 's/.*: "(.*)".*/\1/' || echo "$URL")"
+  REF="$(grep -E '"engine_ref":' "$JSON_CONFIG" | sed -E 's/.*: "(.*)".*/\1/' || echo "$REF")"
+fi
+
+# Colors
+C_RED='\033[31m'
+C_CYAN='\033[36m'
+C_RESET='\033[0m'
+
+if [ ! -d "$CHANAKYA_DIR" ]; then
+  printf "  ${C_CYAN}[..]${C_RESET} Chanakya engine missing in .chanakya/\n"
+  
+  # If the command is 'init', we can try to automate the clone
+  if [ "${1:-}" = "init" ]; then
+    printf "  ?? Clone engine from $URL @ $REF? [y/N] "
+    read -r response
+    if [[ "$response" =~ ^[yY] ]]; then
+      git clone --depth 1 --branch "$REF" "$URL" "$CHANAKYA_DIR"
+    else
+      echo "  [!!] Init aborted."
+      exit 1
+    fi
+  else
+    printf "  [!!] Run './chanakya init' to set up the framework.\n"
+    exit 1
+  fi
+fi
+
+# Delegate to the engine CLI
+exec "$CHANAKYA_DIR/bin/chanakya" "$@"

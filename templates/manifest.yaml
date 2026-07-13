@@ -25,5 +25,4 @@ models:
 # Pointers to the rest of the framework.
 canary: .chanakya/canary.md
 knowledge_index: .chanakya/knowledge/index.md
-memory_bank: .chanakya/memory-bank
 changelog: .chanakya/CHANGELOG.md

@@ -12,9 +12,8 @@ This repo is governed by the Chanakya framework. Its control center is
 ## Before acting
 
 1. Read `.chanakya/manifest.yaml`.
-2. Resolve the current branch: `git rev-parse --abbrev-ref HEAD`. Read this branch's
-   working memory: `.chanakya/memory-bank/<branch>/active-context.md` and `progress.md`
-   (create the folder/files if missing). Never read another branch's memory.
+2. Resolve the current branch: `git rev-parse --abbrev-ref HEAD`. If local state exists
+   (`.chanakya/state/`), read `active-context.md` and `progress.md`.
 3. Pull only the relevant knowledge from `.chanakya/knowledge/` via its `index.md`.
    Do NOT open raw source folders - they are distilled into the knowledge bundle.
    If a needed concept is missing, propose running the producer (`.chanakya/templates/producer-prompt.md`).

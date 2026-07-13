@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# Simple self-check for Chanakya source repo
+#
+set -euo pipefail
+
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$BIN_DIR/.." && pwd)"
+
+# Colors
+C_RED='\033[31m'
+C_GREEN='\033[32m'
+C_RESET='\033[0m'
+
+ok()   { printf "  ${C_GREEN}[ok]${C_RESET} %s\n" "$1"; }
+warn() { printf "  ${C_YELLOW}[warn]${C_RESET} %s\n" "$1"; }
+bad()  { printf "  ${C_RED}[!!]${C_RESET} %s\n" "$1"; exit 1; }
+
+# Add yellow for warn
+C_YELLOW='\033[33m'
+
+echo "Verifying Chanakya Source..."
+
+# 1. Syntax check
+bash -n "$ROOT/bin/chanakya" || bad "Syntax error in bin/chanakya"
+bash -n "$ROOT/templates/chanakya" || bad "Syntax error in templates/chanakya"
+for f in "$ROOT/lib"/*.sh; do
+  bash -n "$f" || bad "Syntax error in $f"
+done
+ok "Syntax check passed."
+
+# 2. Path check
+grep -r "[^.]chanakya/manifest.yaml" "$ROOT" --exclude-dir=.git --exclude="verify" | grep -v "README.md" && bad "Stale path 'chanakya/manifest.yaml' (without dot) found."
+grep -r "memory-bank" "$ROOT" --exclude-dir=.git --exclude="verify" && bad "Stale reference to 'memory-bank' found."
+ok "Path check passed."
+
+# 3. Template check
+[ -f "$ROOT/templates/chanakya" ] || bad "Shim template missing."
+[ -f "$ROOT/templates/manifest.yaml" ] || bad "Manifest template missing."
+[ -d "$ROOT/templates/skills/chanakya-plan" ] || bad "Plan skill template missing."
+[ -d "$ROOT/templates/skills/chanakya-implement" ] || bad "Implement skill template missing."
+ok "Templates check passed."
+
+# 4. Doc check
+grep -q "\.chanakya\.json" "$ROOT/README.md" && warn "README still mentions .chanakya.json"
+grep -q "bin/chanakya > chanakya" "$ROOT/README.md" && bad "README bootstrap still uses bin/chanakya instead of shim."
+ok "Doc sanity check passed (basic)."
+
+echo
+ok "Verification complete."

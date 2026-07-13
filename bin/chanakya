@@ -50,30 +50,26 @@ cmd_doctor() {
 cmd_status() {
   cmd_doctor || return 1
   echo
-  printf "Chanakya %s  -  %s\n" "$(get_version)" "$(manifest_value name)"
+  printf "Chanakya %s\n" "$(get_version)"
   echo
   
   step "Project"
   local br; br="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "(not a git repo)")"
   info "Branch: $br"
   
-  step "Source Paths"
-  if [ ! -f "$CHANAKYA_DIR/repo-paths.properties" ]; then
-    warn "repo-paths.properties missing (run 'chanakya init')"
-  else
-    # Check paths defined in manifest
-    # This is a bit tricky since we don't have a real YAML parser in POSIX shell.
-    # We'll just check common ones for now or parse the manifest more carefully.
-    grep -E "^[[:space:]]+source:" "$CHANAKYA_DIR/manifest.yaml" 2>/dev/null | sed -E 's/.*source:[[:space:]]*//' | while read -r src; do
-      local val; val="$(prop_value "$src")"
-      if [ -n "$val" ] && [ -e "$val" ]; then ok "$src -> $val"; else bad "$src is invalid or missing"; fi
-    done
+  if [ -d "$CHANAKYA_DIR/state" ]; then
+    local s; s="$(find "$CHANAKYA_DIR/state" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+    ok "State: $s files"
   fi
-  
+
   step "Health"
   local n; n="$(find "$CHANAKYA_DIR/knowledge" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
   info "Knowledge: $n files"
   if [ -f "$CHANAKYA_DIR/canary.md" ]; then ok "Canary: present"; else warn "Canary: missing"; fi
+  
+  resolve_engine
+  step "Framework"
+  info "Source: $ENGINE_URL @ $ENGINE_REF"
 }
 
 cmd_assess() {
@@ -92,34 +88,125 @@ cmd_assess() {
 
 # --- Maintenance ------------------------------------------------------------------------------
 
-cmd_update() {
+cmd_update_framework() {
+  local check_only=${1:-0}
+  resolve_engine
+  
   step "Checking for engine updates"
-  if [ ! -f "$REPO_ROOT/.chanakya.json" ]; then bad ".chanakya.json missing."; return 1; fi
+  info "Engine Source: $ENGINE_URL @ $ENGINE_REF"
   
-  local url; url="$(grep -E '"engine_url":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/')"
-  local ref; ref="$(grep -E '"engine_ref":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/')"
+  if [ "$check_only" -eq 1 ]; then
+    # Simple check: compare local VERSION with remote (this is a bit complex for shell without fetch)
+    # For now, just report what we have and what we track.
+    info "Local version: $(get_version)"
+    info "Tracking branch/ref: $ENGINE_REF"
+    return 0
+  fi
   
-  info "Engine: $url @ $ref"
-  if confirm "Sync engine files to $ref?"; then
+  if confirm "Sync framework files from $ENGINE_REF?"; then
     local tmp_dir; tmp_dir="/tmp/chanakya-update-$(date +%s)"
     info "Downloading to temporary folder..."
-    git clone --depth 1 --branch "$ref" "$url" "$tmp_dir" >/dev/null 2>&1 || {
-      bad "Failed to download version $ref. Check the URL and tag."
+    git clone --depth 1 --branch "$ENGINE_REF" "$ENGINE_URL" "$tmp_dir" >/dev/null 2>&1 || {
+      bad "Failed to download $ENGINE_REF from $ENGINE_URL."
       return 1
     }
     
-    info "Syncing files to .chanakya/..."
-    # Copy only the engine parts, preserving your local generated files
-    cp -r "$tmp_dir/bin" "$CHANAKYA_DIR/"
-    cp -r "$tmp_dir/lib" "$CHANAKYA_DIR/"
-    cp -r "$tmp_dir/templates" "$CHANAKYA_DIR/"
-    cp -r "$tmp_dir/docs" "$CHANAKYA_DIR/"
+    info "Syncing framework files to .chanakya/..."
+    # Sync engine-owned directories
+    mkdir -p "$CHANAKYA_DIR/bin" "$CHANAKYA_DIR/lib" "$CHANAKYA_DIR/templates" "$CHANAKYA_DIR/docs"
+    cp -r "$tmp_dir/bin/." "$CHANAKYA_DIR/bin/"
+    cp -r "$tmp_dir/lib/." "$CHANAKYA_DIR/lib/"
+    cp -r "$tmp_dir/templates/." "$CHANAKYA_DIR/templates/"
+    cp -r "$tmp_dir/docs/." "$CHANAKYA_DIR/docs/"
     cp "$tmp_dir/VERSION" "$CHANAKYA_DIR/"
     cp "$tmp_dir/CHANGELOG.md" "$CHANAKYA_DIR/"
     cp "$tmp_dir/LICENSE" "$CHANAKYA_DIR/"
     
+    # Optionally refresh the shim
+    if [ -f "$REPO_ROOT/chanakya" ]; then
+      if diff -q "$tmp_dir/templates/chanakya" "$REPO_ROOT/chanakya" >/dev/null 2>&1; then
+        : # identical
+      else
+        if confirm "Refresh root 'chanakya' shim?"; then
+          cp "$tmp_dir/templates/chanakya" "$REPO_ROOT/chanakya"
+          chmod +x "$REPO_ROOT/chanakya"
+          ok "Shim refreshed."
+        fi
+      fi
+    fi
+    
     rm -rf "$tmp_dir"
-    ok "Engine files updated to $ref. (No git actions taken in your project)"
+    ok "Framework updated to latest $ENGINE_REF. (No project files were changed)"
+  fi
+}
+
+cmd_update() {
+  step "Project Health Pass"
+  cmd_doctor || return 1
+  echo
+  
+  local issues=0
+  
+  # 1. Source Paths
+  step "Source Paths"
+  grep -E "^[[:space:]]+source:" "$CHANAKYA_DIR/manifest.yaml" 2>/dev/null | sed -E 's/.*source:[[:space:]]*//' | while read -r src; do
+    local val; val="$(prop_value "$src")"
+    if [ -z "$val" ] || [ ! -e "$val" ]; then
+      bad "$src is invalid or missing: $val"
+      issues=$((issues + 1))
+    else
+      ok "$src -> $val"
+    fi
+  done
+  
+  # 2. Knowledge Coverage
+  step "Knowledge Coverage"
+  local n; n="$(find "$CHANAKYA_DIR/knowledge" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$n" -eq 0 ]; then
+    warn "No distilled knowledge found. Run 'chanakya produce <section>'."
+    issues=$((issues + 1))
+  else
+    ok "Knowledge: $n files"
+  fi
+  
+  # 3. Canary
+  step "Canary"
+  if [ ! -f "$CHANAKYA_DIR/canary.md" ]; then
+    warn "Canary missing."
+    issues=$((issues + 1))
+  else
+    ok "Canary: present"
+  fi
+  
+  # 4. Rules & Skills
+  step "Governance"
+  if [ ! -f "$REPO_ROOT/.cursor/rules/chanakya.mdc" ]; then
+    warn "Always-on rule missing."
+    issues=$((issues + 1))
+  else
+    ok "Rule: present"
+  fi
+  
+  # 5. Local State
+  step "State"
+  if [ -d "$CHANAKYA_DIR/state" ]; then
+    local s; s="$(find "$CHANAKYA_DIR/state" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+    ok "Local state: $s files"
+  else
+    info "Local state: none"
+  fi
+  
+  # 6. Framework Status
+  resolve_engine
+  info "Version: $(get_version)"
+  info "Source:  $ENGINE_URL @ $ENGINE_REF"
+  
+  echo
+  if [ "$issues" -gt 0 ]; then
+    bad "Project health pass found $issues issues."
+    return 1
+  else
+    ok "Project health is clean."
   fi
 }
 
@@ -127,27 +214,27 @@ cmd_suggest_commit() {
   step "Commit Suggestions"
   echo "Chanakya suggests staging these framework files for your team:"
   echo
-  local files="chanakya .chanakya.json .cursor/rules/chanakya.mdc .gitignore"
+  local files="chanakya .cursor/rules/chanakya.mdc .gitignore"
   [ -f "$REPO_ROOT/.cursor/rules/ponytail.mdc" ] && files="$files .cursor/rules/ponytail.mdc"
+  
+  # Check for skills if they exist
+  if [ -d "$REPO_ROOT/.cursor/skills" ]; then
+    local skills; skills="$(find "$REPO_ROOT/.cursor/skills" -name "chanakya-*" -type d 2>/dev/null)"
+    if [ -n "$skills" ]; then
+      files="$files .cursor/skills/chanakya-*"
+    fi
+  fi
   
   printf "  ${C_CYAN}git add $files${C_RESET}\n"
   echo
-  info "Reason: These are the minimal footprint files needed for teammates to run './chanakya init'."
+  info "Reason: These are the minimal governance files needed to share Chanakya."
+  warn "Do NOT commit .chanakya/ or .chanakya.json."
 }
 
 cmd_uninstall() {
   step "Uninstalling Chanakya"
-  warn "This will remove .chanakya/, the rule, the shim, and .chanakya.json."
+  warn "This will remove .chanakya/, the rule, the shim, and any local state."
   if confirm "Are you sure you want to uninstall?"; then
-    local keep_mem=0
-    if confirm "Keep working memory folders?" "default_y"; then keep_mem=1; fi
-    
-    if [ "$keep_mem" -eq 1 ] && [ -d "$CHANAKYA_DIR/memory-bank" ]; then
-      mkdir -p "$REPO_ROOT/chanakya-memory-backup"
-      cp -r "$CHANAKYA_DIR/memory-bank" "$REPO_ROOT/chanakya-memory-backup/"
-      info "Memory backed up to chanakya-memory-backup/"
-    fi
-    
     rm -rf "$CHANAKYA_DIR"
     rm -f "$REPO_ROOT/chanakya"
     rm -f "$REPO_ROOT/.chanakya.json"
@@ -202,7 +289,7 @@ cmd_produce() {
 # scan: Inventory and planned actions
 cmd_scan() {
   step "Reconciling artifacts"
-  local items=("engine" "manifest" "paths" "rule" "ponytail" "canary" "knowledge")
+  local items=("engine" "manifest" "paths" "rule" "ponytail" "canary" "knowledge" "shim")
   local total=${#items[@]}
   local i=1
   
@@ -224,6 +311,8 @@ cmd_scan() {
       knowledge)
         local n; n="$(find "$CHANAKYA_DIR/knowledge" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
         if [ "$n" -gt 0 ]; then ok "Knowledge: $n files"; else warn "Knowledge: empty"; fi ;;
+      shim)
+        if [ -f "$REPO_ROOT/chanakya" ]; then ok "Shim: present"; else warn "Shim: missing"; fi ;;
     esac
     i=$((i+1))
   done
@@ -233,37 +322,52 @@ cmd_init() {
   cmd_doctor || return 1
   step "Initializing Chanakya"
   
-  # 1. Reconcile
-  cmd_scan
-  echo
-  
-  # 2. Engine clone
+  # 1. Engine clone
   if [ ! -d "$CHANAKYA_DIR" ]; then
-    if [ ! -f "$REPO_ROOT/.chanakya.json" ]; then
-      bad ".chanakya.json missing."
-      info "Create a .chanakya.json in your project root with your engine details."
-      info "Example:"
-      info ' { "engine_url": "https://github.com/dineshwastaken/chanakya.git", "engine_ref": "main" }'
-      return 1
-    fi
-    local url; url="$(grep -E '"engine_url":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/')"
-    local ref; ref="$(grep -E '"engine_ref":' "$REPO_ROOT/.chanakya.json" | sed -E 's/.*: "(.*)".*/\1/')"
-    
-    info "Preparing to clone engine: $url @ $ref"
+    resolve_engine
+    info "Preparing to clone engine: $ENGINE_URL @ $ENGINE_REF"
     if confirm "Clone engine into .chanakya/?"; then
-      git_safe clone --depth 1 --branch "$ref" "$url" "$CHANAKYA_DIR" || {
-        bad "Clone failed. Check your network or the URL in .chanakya.json."
+      git_safe clone --depth 1 --branch "$ENGINE_REF" "$ENGINE_URL" "$CHANAKYA_DIR" || {
+        bad "Clone failed. Check your network or source settings."
         return 1
       }
     fi
   fi
+
+  # 2. Footprint (Shim)
+  if [ ! -f "$REPO_ROOT/chanakya" ]; then
+    if confirm "Install Chanakya shim to project root?"; then
+      cp "$CHANAKYA_DIR/templates/chanakya" "$REPO_ROOT/chanakya"
+      chmod +x "$REPO_ROOT/chanakya"
+      ok "Shim installed."
+    fi
+  fi
   
-  # 3. Footprint
+  # 3. Manifest
+  if [ ! -f "$CHANAKYA_DIR/manifest.yaml" ]; then
+    if confirm "Seed manifest.yaml?"; then
+      local v; v="$(cat "$CHANAKYA_DIR/VERSION" 2>/dev/null || echo "0.0.0")"
+      sed "s/{{VERSION}}/$v/g" "$CHANAKYA_DIR/templates/manifest.yaml" > "$CHANAKYA_DIR/manifest.yaml"
+      ok "Manifest seeded."
+    fi
+  fi
+
+  # 4. Footprint (Rule)
   if [ ! -f "$REPO_ROOT/.cursor/rules/chanakya.mdc" ]; then
     if confirm "Install always-on Cursor rule?"; then
       mkdir -p "$REPO_ROOT/.cursor/rules"
       cp "$CHANAKYA_DIR/templates/rules/chanakya.mdc" "$REPO_ROOT/.cursor/rules/chanakya.mdc"
       ok "Chanakya rule installed."
+    fi
+  fi
+
+  if [ ! -d "$REPO_ROOT/.cursor/skills/chanakya-plan" ]; then
+    if confirm "Install Chanakya Cursor skills?"; then
+      mkdir -p "$REPO_ROOT/.cursor/skills/chanakya-plan"
+      mkdir -p "$REPO_ROOT/.cursor/skills/chanakya-implement"
+      cp "$CHANAKYA_DIR/templates/skills/chanakya-plan/SKILL.md" "$REPO_ROOT/.cursor/skills/chanakya-plan/SKILL.md"
+      cp "$CHANAKYA_DIR/templates/skills/chanakya-implement/SKILL.md" "$REPO_ROOT/.cursor/skills/chanakya-implement/SKILL.md"
+      ok "Chanakya skills installed."
     fi
   fi
   
@@ -287,7 +391,7 @@ cmd_init() {
     fi
   fi
   
-  # 4. Local paths
+  # 5. Local paths
   if [ ! -f "$CHANAKYA_DIR/repo-paths.properties" ]; then
     if confirm "Set up local source paths now?"; then
       cp "$CHANAKYA_DIR/templates/repo-paths.properties.template" "$CHANAKYA_DIR/repo-paths.properties"
@@ -295,7 +399,7 @@ cmd_init() {
     fi
   fi
   
-  # 5. Agent permission gate
+  # 6. Agent permission gate
   echo
   if confirm "Print instructions for agent-led steps (canary, knowledge)?" "default_y"; then
     info "Next steps (run these in an Agent chat):"
@@ -315,6 +419,7 @@ case "${1:-help}" in
   status)   cmd_status ;;
   assess)   cmd_assess ;;
   update)   cmd_update ;;
+  update-framework) cmd_update_framework "${2:-0}" ;;
   enable)   cmd_enable ;;
   disable)  cmd_disable ;;
   suggest-commit) cmd_suggest_commit ;;
@@ -338,7 +443,8 @@ case "${1:-help}" in
      echo "  status          show project health";
      echo "  assess          calculate token footprint and benefit";
      echo "  produce         distill knowledge";
-     echo "  update          pull engine updates";
+     echo "  update          run project health pass";
+     echo "  update-framework [--check] pull framework updates";
      echo "  enable/disable  toggle framework governance";
      echo "  suggest-commit  see what to check in";
      echo "  uninstall       remove framework from project";
